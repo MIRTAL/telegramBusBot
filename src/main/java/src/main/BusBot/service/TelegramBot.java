@@ -14,6 +14,7 @@ import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.MessageEntity;
@@ -34,10 +35,14 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.ProtocolException;
 import java.net.URL;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+
+import static jakarta.xml.bind.DatatypeConverter.parseString;
 
 @Component
 public class TelegramBot extends TelegramLongPollingBot {
@@ -46,17 +51,18 @@ public class TelegramBot extends TelegramLongPollingBot {
 
     private final CityModeService cityModeService = CityModeService.getInstance();
 
+    DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+    LocalDateTime now = LocalDateTime.now();
 
-
-    static final String HELP_TEXT = "Вы нажали на помощь, но ее нет.\n\n" +
-                                    "Надеюсь она когда-нибудь добавится.";
+    static final String HELP_TEXT = "Меня зовут BusBot. Я помогу тебе узнать количество свободных мест на нужный тебе маршрут.\n" +
+                                    "Для этого нажми на /schedule";
     public TelegramBot (BotConfig config){
         this.config = config;
         List listOfCommands = new ArrayList<>();
-        listOfCommands.add(new BotCommand("/start","get a welcome message"));
-        listOfCommands.add(new BotCommand("/set_route","get your data store"));
-        listOfCommands.add(new BotCommand("/schedule","show рассписание"));
-        listOfCommands.add(new BotCommand("/help","помощь"));
+        listOfCommands.add(new BotCommand("/start","Приветствие"));
+        listOfCommands.add(new BotCommand("/schedule","Узнать расписание"));
+    //    listOfCommands.add(new BotCommand("/schedule","show рассписание"));
+        listOfCommands.add(new BotCommand("/help","Помощь"));
         try {
             this.execute(new SetMyCommands(listOfCommands, new BotCommandScopeDefault(), null));
         }
@@ -94,8 +100,9 @@ public class TelegramBot extends TelegramLongPollingBot {
                                 .getText()
                                 .substring(commandEntity.get().getOffset(), commandEntity.get().getLength());
                 switch (command) {
-                    case "/set_route":
+                    case "/schedule":
                         List<List<InlineKeyboardButton>> buttons = new ArrayList<>();
+                        List<List<InlineKeyboardButton>> buttons2 = new ArrayList<>();
                         City cityFrom = cityModeService.getCityFrom(message.getChatId());
                         City cityTo = cityModeService.getCityTo(message.getChatId());
                         for (City city : City.values()) {
@@ -116,38 +123,109 @@ public class TelegramBot extends TelegramLongPollingBot {
                                         .chatId(message.getChatId().toString())
                                         .replyMarkup(InlineKeyboardMarkup.builder().keyboard(buttons).build())
                                         .build());
+                        for (int i =0;i<=2;i++) {
+
+                            int two = i + 3;
+                            int three = i + 6;
+                            buttons2.add(
+                                    Arrays.asList(
+                                            InlineKeyboardButton.builder()
+                                                    .text(dtf.format(now.plusDays(i)))
+                                                    .callbackData("date"+ (i) +":" + dtf.format(now.plusDays(i)))
+                                                    .build(),
+                                            InlineKeyboardButton.builder()
+                                                    .text(dtf.format(now.plusDays(i+3)))
+                                                    .callbackData("date"+ (two) +":" + dtf.format(now.plusDays(i+3)))
+                                                    .build(),
+                                            InlineKeyboardButton.builder()
+                                                    .text(dtf.format(now.plusDays(i+6)))
+                                                    .callbackData("date"+ (three) +":" + dtf.format(now.plusDays(i+6)))
+                                                    .build()));
+                        }
+                        execute(
+                                SendMessage.builder()
+                                        .text("Укажите дату ")
+                                        .chatId(message.getChatId().toString())
+                                        .replyMarkup(InlineKeyboardMarkup.builder().keyboard(buttons2).build())
+                                        .build());
                         return;
+                    case "/start":
+                        execute(
+                                SendMessage.builder()
+                                        .chatId(message.getChatId().toString())
+                                        .text(welcome(message.getChatId(), message.getChat().getFirstName()))
+                                        .build());
+                        break;
+                    case "/help":
+                        execute(
+                                SendMessage.builder()
+                                        .chatId(message.getChatId().toString())
+                                        .text(HELP_TEXT)
+                                        .build());
+                        break;
                 }
+
             }
         }
-        if (message.hasText()) {
-            String messageText = message.getText();
-         //   String value = parseString(messageText);
-            City cityFrom = cityModeService.getCityFrom(message.getChatId());
-            City cityTo = cityModeService.getCityTo(message.getChatId());
-     //       double ratio = currencyConversionService.getConversionRatio(originalCurrency, targetCurrency);
-
-            if (!messageText.isEmpty()) {
-                if(cityFrom == cityTo || (cityFrom.getId() + cityTo.getId() == 5)){
-                    execute(
-                            SendMessage.builder()
-                                    .chatId(message.getChatId().toString())
-                                    .text("Направления "+ cityFrom +" ➡️ " + cityTo + " не существует, попробуйте еще раз /set_route")
-                                    .build());
-                }else {
-                    execute(
-                            SendMessage.builder()
-                                    .chatId(message.getChatId().toString())
-                                    .text(getInfo(cityFrom, cityTo))
-                                    .build());
-                }
-                }
-        }
+//        if (message.hasText()) {
+//            String messageText = message.getText();
+//         //   String value = parseString(messageText);
+//            City cityFrom = cityModeService.getCityFrom(message.getChatId());
+//            City cityTo = cityModeService.getCityTo(message.getChatId());
+//
+//            if (!messageText.isEmpty()) {
+//                if(cityFrom == cityTo || (cityFrom.getId() + cityTo.getId() == 5)){
+//                    execute(
+//                            SendMessage.builder()
+//                                    .chatId(message.getChatId().toString())
+//                                    .text("Направления "+ cityFrom +" ➡️ " + cityTo + " не существует, попробуйте еще раз /set_route")
+//                                    .build());
+//                }else {
+//                    execute(
+//                            SendMessage.builder()
+//                                    .chatId(message.getChatId().toString())
+//                                    .text(getInfo(cityFrom, cityTo, "24.03.2023"))
+//                                    .build());
+//                }
+//                }
+//        }
     }
 
     @SneakyThrows
     private void handleCallback(CallbackQuery callbackQuery) {
             Message message = callbackQuery.getMessage();
+            String time = callbackQuery.getMessage().getText();
+        if(time.equals("Укажите дату")) {
+            City cityFrom = cityModeService.getCityFrom(message.getChatId());
+            City cityTo = cityModeService.getCityTo(message.getChatId());
+            if(cityFrom == cityTo || (cityFrom.getId() + cityTo.getId() == 5)){
+                execute(
+                        SendMessage.builder()
+                                .chatId(message.getChatId().toString())
+                                .text("Направления "+ cityFrom +" ➡️ " + cityTo + " не существует, попробуйте еще раз /schedule")
+                                .build());
+            }else {
+                String[] date = callbackQuery.getData().split(":");
+                for (int i =0;i<=8;i++) {
+
+                    if(date[0].equals("date"+i)){
+                        execute(
+                                EditMessageText.builder()
+                                        .chatId(message.getChatId().toString())
+                                        .messageId(message.getMessageId())
+                                        .text(date[1])
+                                        .build());
+                        execute(
+                                SendMessage.builder()
+                                        .chatId(message.getChatId().toString())
+                                        .text(getInfo(cityFrom, cityTo, date[1]))
+                                        .build());
+                        break;
+                    }
+                }
+
+            }
+        }
             String[] param = callbackQuery.getData().split(":");
             String action = param[0];
             City newCity = City.valueOf(param[1]);
@@ -180,12 +258,25 @@ public class TelegramBot extends TelegramLongPollingBot {
                             .messageId(message.getMessageId())
                             .replyMarkup(InlineKeyboardMarkup.builder().keyboard(buttons).build())
                             .build());
-        }
+
+    }
+
+
     private String getCityButton(City saved, City current) {
         return saved == current ? current + " ✅" : current.name();
     }
 
-    private String getInfo(City from, City to) {
+    private String welcome(long chatId, String name){
+
+        String answer = "Привет, " +name+ "!!\n" +
+                "Меня зовут BusBot. Я помогу тебе узнать количество свободных мест на нужный тебе маршрут.\n" +
+                "Для этого нажми на /schedule";
+
+        // log.info ("Replied to user " + name);
+        return answer;
+    }
+
+    private String getInfo(City from, City to, String date) {
         String uri = "https://bilet.osipovichi-minsk.by/schedules";
           // The parameters to include in the request
            String param1 = "station_from_id=0";
@@ -194,13 +285,13 @@ public class TelegramBot extends TelegramLongPollingBot {
       //  System.out.println(param3);
            String param4 = String.valueOf(to.getId());
       //  System.out.println(param4);
-            String param5 = "19.03";
+            String param5 = date;
            String param6 = "time=00:00";
             String param7 = "places=1";
 
-        String race = "Расписание на "+ param5 + ".2023\nНаправление: "+ from +" ➡️ " +to +"\n";
+        String race = "Расписание на "+ param5 + "\nНаправление: "+ from +" ➡️ " +to +"\n";
 
-            String queryString = param1 + "&" +param2 + "&city_from_id=" +param3 + "&city_to_id=" +param4 + "&date=" +param5 + ".2023&" +param6 + "&" +param7;
+            String queryString = param1 + "&" +param2 + "&city_from_id=" +param3 + "&city_to_id=" +param4 + "&date=" +param5 + "&" +param6 + "&" +param7;
 
             // Append the query string to the URL
             uri += "?" + queryString;
